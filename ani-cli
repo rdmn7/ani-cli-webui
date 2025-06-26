@@ -218,6 +218,14 @@ select_quality() {
     # removing urls which have soft subs to avoid playing on android, iSH and vlc (m3u8 streams don't get correct referrer)
     printf '%s' "$player_function" | cut -f1 -d" " | grep -qE '(android|iSH|vlc)' && links=$(printf '%s' "$links" | sed '/cc>/d;/subtitle >/d;/m3u8_refr >/d')
     printf '%s' "$player_function" | cut -f1 -d" " | grep -qE '(android|iSH)' && links=$(printf '%s' "$links" | sed '/Yt >/d')
+    
+    # For JSON output, prefer direct video URLs over fast4speed proxy URLs
+    if [ "$json_output" = 1 ]; then
+        # Try to get non-fast4speed links first
+        non_proxy_links=$(printf "%s" "$links" | grep -v "tools.fast4speed.rsvp")
+        [ -n "$non_proxy_links" ] && links="$non_proxy_links"
+    fi
+    
     case "$1" in
         best) result=$(printf "%s" "$links" | head -n1) ;;
         worst) result=$(printf "%s" "$links" | grep -E '^[0-9]{3,4}' | tail -n1) ;;
@@ -574,7 +582,14 @@ case "$search" in
         [ "$index" -eq "$index" ] 2>/dev/null && result=$(printf "%s" "$anime_list" | sed -n "${index}p")
         if [ -z "$index" ]; then
             if [ "$json_output" = 1 ]; then
-                result=$(printf "%s" "$anime_list" | head -n1)
+                # Try to find exact match first, then fall back to first result
+                original_query=$(printf "%s" "$query" | sed "s|+| |g")
+                exact_match=$(printf "%s" "$anime_list" | grep -E "	${original_query}( \([0-9]+ episodes\))?$" | head -n1)
+                if [ -n "$exact_match" ]; then
+                    result="$exact_match"
+                else
+                    result=$(printf "%s" "$anime_list" | head -n1)
+                fi
             else
                 result=$(printf "%s" "$anime_list" | nl -w 2 | sed 's/^[[:space:]]//' | nth "Select anime: ")
             fi
