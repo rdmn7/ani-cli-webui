@@ -274,13 +274,11 @@ search_anime() {
     #shellcheck disable=SC2016
     search_gql='query( $search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType ) { shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) { edges { _id name availableEpisodes __typename } }}'
 
-    result=$(curl -e "$allanime_refr" -s -G "${allanime_api}/api" --data-urlencode "variables={\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"$1\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"}" --data-urlencode "query=$search_gql" -A "$agent" | sed 's|Show|\
-| g' | sed -n 's|.*"_id":"\([^"]*\)","name":"\([^"]*\)",.*"'${mode}'":\([1-9][^,]*\).*|\1	\2 (\3 episodes)|p' | sed 's/\\"//g')
+    result=$(curl -e "$allanime_refr" -s -G "${allanime_api}/api" --data-urlencode "variables={\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"$1\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"}" --data-urlencode "query=$search_gql" -A "$agent" | grep -o '"_id":"[^"]*","name":"[^"]*"[^}]*"'${mode}'":[0-9]*' | sed 's/"_id":"//' | sed 's/","name":"/ /' | sed 's/",.*"'${mode}'":/ /' | sed 's/$/episodes/' | sed 's/\([0-9]*\)episodes/(\1 episodes)/' | sed 's/\\"//g' | awk '{print $1 "\t" substr($0, index($0,$2))}')
     
     # If no results and query is "1P", try searching for "One Piece" and filter for 1P
     if [ -z "$result" ] && [ "$1" = "1P" ]; then
-        result=$(curl -e "$allanime_refr" -s -G "${allanime_api}/api" --data-urlencode "variables={\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"One Piece\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"}" --data-urlencode "query=$search_gql" -A "$agent" | sed 's|Show|\
-| g' | sed -n 's|.*"_id":"\([^"]*\)","name":"\([^"]*\)",.*"'${mode}'":\([1-9][^,]*\).*|\1	\2 (\3 episodes)|p' | sed 's/\\"//g' | grep "^[^	]*	1P ([0-9]+ episodes)$")
+        result=$(curl -e "$allanime_refr" -s -G "${allanime_api}/api" --data-urlencode "variables={\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"One Piece\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"}" --data-urlencode "query=$search_gql" -A "$agent" | grep -o '"_id":"[^"]*","name":"[^"]*"[^}]*"'${mode}'":[0-9]*' | sed 's/"_id":"//' | sed 's/","name":"/ /' | sed 's/",.*"'${mode}'":/ /' | sed 's/$/episodes/' | sed 's/\([0-9]*\)episodes/(\1 episodes)/' | sed 's/\\"//g' | awk '{print $1 "\t" substr($0, index($0,$2))}' | grep "^[^	]*	1P ([0-9]+ episodes)$")
     fi
     
     printf "%s\n" "$result"
