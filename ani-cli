@@ -269,6 +269,15 @@ get_episode_url() {
     fi
 }
 
+# debug function to help identify parsing issues
+debug_search() {
+    search_gql='query( $search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType ) { shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) { edges { _id name availableEpisodes __typename } }}'
+    
+    echo "=== DEBUG: Raw API Response ===" >&2
+    curl -e "$allanime_refr" -s -G "${allanime_api}/api" --data-urlencode "variables={\"search\":{\"allowAdult\":false,\"allowUnknown\":false,\"query\":\"$1\"},\"limit\":40,\"page\":1,\"translationType\":\"$mode\",\"countryOrigin\":\"ALL\"}" --data-urlencode "query=$search_gql" -A "$agent" | head -c 1000 >&2
+    echo -e "\n=== END RAW ===" >&2
+}
+
 # search the query and give results
 search_anime() {
     #shellcheck disable=SC2016
@@ -510,6 +519,7 @@ while [ $# -gt 0 ]; do
             ;;
         --dub) mode="dub" ;;
         --json) json_output=1 ;;
+        --debug-search) debug_search "$2"; exit 0 ;;
         --no-detach) no_detach=1 ;;
         --exit-after-play) exit_after_play=1 && no_detach=1 ;;
         --rofi) use_external_menu=1 ;;
