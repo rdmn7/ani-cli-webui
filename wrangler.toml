@@ -1,0 +1,10 @@
+name = "ani-cli-web-proxy"
+type = "javascript"
+zone_id = ""
+account_id = ""
+route = ""
+workers_dev = true
+
+[env.production]
+name = "ani-cli-web-proxy"
+workers_dev = true

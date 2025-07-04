@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ani-CLI Web</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #4a9eff;
+        }
+        
+        .search-box {
+            display: flex;
+            margin-bottom: 30px;
+            gap: 10px;
+        }
+        
+        input[type="text"] {
+            flex: 1;
+            padding: 12px;
+            border: 1px solid #333;
+            border-radius: 5px;
+            background: #2a2a2a;
+            color: #fff;
+            font-size: 16px;
+        }
+        
+        button {
+            padding: 12px 24px;
+            background: #4a9eff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        
+        button:hover {
+            background: #357abd;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #888;
+        }
+        
+        .results {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .anime-card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #333;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        
+        .anime-card:hover {
+            transform: translateY(-2px);
+            border-color: #4a9eff;
+        }
+        
+        .anime-title {
+            font-size: 18px;
+            margin-bottom: 10px;
+            color: #4a9eff;
+        }
+        
+        .anime-episodes {
+            color: #888;
+            font-size: 14px;
+        }
+        
+        .episodes-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .episode-btn {
+            padding: 8px 12px;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+            border-radius: 4px;
+            cursor: pointer;
+            text-align: center;
+            font-size: 14px;
+        }
+        
+        .episode-btn:hover {
+            background: #4a9eff;
+            border-color: #4a9eff;
+        }
+        
+        .video-player {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        video {
+            width: 100%;
+            max-width: 800px;
+            border-radius: 8px;
+        }
+        
+        .mode-selector {
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .mode-selector label {
+            margin-right: 15px;
+            cursor: pointer;
+        }
+        
+        .mode-selector input[type="radio"] {
+            margin-right: 5px;
+        }
+        
+        .error {
+            background: #ff4444;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎌 Ani-CLI Web</h1>
+        
+        <div class="mode-selector">
+            <label><input type="radio" name="mode" value="sub" checked> Subtitled</label>
+            <label><input type="radio" name="mode" value="dub"> Dubbed</label>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Search anime... (e.g., jjk, naruto, one piece)" />
+            <button onclick="searchAnime()">Search</button>
+        </div>
+        
+        <div id="loading" class="loading" style="display: none;">Searching...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="results" class="results"></div>
+        <div id="episodes" class="episodes-list"></div>
+        <div id="videoPlayer" class="video-player"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'https://api.allanime.to';
+        const REFERER = 'https://allanime.to';
+        const API_PROXY = 'https://your-worker.your-subdomain.workers.dev'; // Replace with your Cloudflare Worker URL
+        
+        let currentAnime = null;
+        let currentMode = 'sub';
+        
+        // Update mode when radio button changes
+        document.querySelectorAll('input[name="mode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                currentMode = e.target.value;
+            });
+        });
+        
+        // Search on Enter key
+        document.getElementById('searchInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                searchAnime();
+            }
+        });
+        
+        async function searchAnime() {
+            const query = document.getElementById('searchInput').value.trim();
+            if (!query) return;
+            
+            showLoading(true);
+            hideError();
+            clearResults();
+            
+            try {
+                const searchQuery = `query( $search: SearchInput $limit: Int $page: Int $translationType: VaildTranslationTypeEnumType $countryOrigin: VaildCountryOriginEnumType ) { shows( search: $search limit: $limit page: $page translationType: $translationType countryOrigin: $countryOrigin ) { edges { _id name availableEpisodes __typename } }}`;
+                
+                const variables = {
+                    search: {
+                        allowAdult: false,
+                        allowUnknown: false,
+                        query: query
+                    },
+                    limit: 40,
+                    page: 1,
+                    translationType: currentMode.toUpperCase(),
+                    countryOrigin: "ALL"
+                };
+                
+                const url = `${API_PROXY}/api?variables=${encodeURIComponent(JSON.stringify(variables))}&query=${encodeURIComponent(searchQuery)}`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data);
+                
+            } catch (error) {
+                showError('Failed to search anime: ' + error.message);
+                console.error('Search error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        function displayResults(data) {
+            const resultsContainer = document.getElementById('results');
+            
+            if (!data.data || !data.data.shows || !data.data.shows.edges.length) {
+                showError('No results found');
+                return;
+            }
+            
+            const shows = data.data.shows.edges;
+            resultsContainer.innerHTML = shows.map(show => {
+                const episodes = show.availableEpisodes?.[currentMode] || 0;
+                return `
+                    <div class="anime-card" onclick="selectAnime('${show._id}', '${show.name.replace(/'/g, "\\'")}', ${episodes})">
+                        <div class="anime-title">${show.name}</div>
+                        <div class="anime-episodes">${episodes} episodes</div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        function selectAnime(id, name, episodeCount) {
+            currentAnime = { id, name, episodeCount };
+            
+            const episodesContainer = document.getElementById('episodes');
+            const episodes = Array.from({length: episodeCount}, (_, i) => i + 1);
+            
+            episodesContainer.innerHTML = `
+                <h3>Select Episode - ${name}</h3>
+                ${episodes.map(ep => `
+                    <div class="episode-btn" onclick="playEpisode('${id}', ${ep})">
+                        EP ${ep}
+                    </div>
+                `).join('')}
+            `;
+            
+            episodesContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        async function playEpisode(animeId, episodeNum) {
+            showLoading(true);
+            hideError();
+            
+            try {
+                // Step 1: Get episode embed URLs from AllAnime API
+                const episodeQuery = `query($showId: String!, $translationType: VaildTranslationTypeEnumType!, $episodeString: String!) { episode(showId: $showId, translationType: $translationType, episodeString: $episodeString) { episodeString sourceUrls } }`;
+                
+                const variables = {
+                    showId: animeId,
+                    translationType: currentMode.toUpperCase(),
+                    episodeString: episodeNum.toString()
+                };
+                
+                const url = `${API_PROXY}/api?variables=${encodeURIComponent(JSON.stringify(variables))}&query=${encodeURIComponent(episodeQuery)}`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                
+                if (!data.data || !data.data.episode || !data.data.episode.sourceUrls) {
+                    throw new Error('Episode not found or not available');
+                }
+                
+                // Step 2: Process source URLs and extract video links
+                const sourceUrls = data.data.episode.sourceUrls;
+                const videoLinks = await processSourceUrls(sourceUrls);
+                
+                if (videoLinks.length === 0) {
+                    throw new Error('No playable video sources found');
+                }
+                
+                // Step 3: Select best quality and display video player
+                const selectedLink = selectBestQuality(videoLinks);
+                displayVideoPlayer(selectedLink);
+                
+            } catch (error) {
+                showError('Failed to load episode: ' + error.message);
+                console.error('Episode error:', error);
+            } finally {
+                showLoading(false);
+            }
+        }
+        
+        // Process source URLs like ani-cli does
+        async function processSourceUrls(sourceUrls) {
+            const videoLinks = [];
+            
+            for (const source of sourceUrls) {
+                if (!source.sourceUrl || !source.sourceName) continue;
+                
+                const decodedUrl = decodeSourceUrl(source.sourceUrl);
+                if (!decodedUrl) continue;
+                
+                try {
+                    const links = await fetchVideoLinks(decodedUrl, source.sourceName);
+                    videoLinks.push(...links);
+                } catch (error) {
+                    console.warn(`Failed to fetch links from ${source.sourceName}:`, error);
+                }
+            }
+            
+            return videoLinks;
+        }
+        
+        // Decode source URL using the same logic as ani-cli
+        function decodeSourceUrl(encodedUrl) {
+            if (!encodedUrl.startsWith('--')) return encodedUrl;
+            
+            const encoded = encodedUrl.substring(2);
+            const hexMap = {
+                '79': 'A', '7a': 'B', '7b': 'C', '7c': 'D', '7d': 'E', '7e': 'F', '7f': 'G',
+                '70': 'H', '71': 'I', '72': 'J', '73': 'K', '74': 'L', '75': 'M', '76': 'N', '77': 'O',
+                '68': 'P', '69': 'Q', '6a': 'R', '6b': 'S', '6c': 'T', '6d': 'U', '6e': 'V', '6f': 'W',
+                '60': 'X', '61': 'Y', '62': 'Z', '59': 'a', '5a': 'b', '5b': 'c', '5c': 'd', '5d': 'e',
+                '5e': 'f', '5f': 'g', '50': 'h', '51': 'i', '52': 'j', '53': 'k', '54': 'l', '55': 'm',
+                '56': 'n', '57': 'o', '48': 'p', '49': 'q', '4a': 'r', '4b': 's', '4c': 't', '4d': 'u',
+                '4e': 'v', '4f': 'w', '40': 'x', '41': 'y', '42': 'z', '08': '0', '09': '1', '0a': '2',
+                '0b': '3', '0c': '4', '0d': '5', '0e': '6', '0f': '7', '00': '8', '01': '9', '15': '-',
+                '16': '.', '67': '_', '46': '~', '02': ':', '17': '/', '07': '?', '1b': '#', '63': '[',
+                '65': ']', '78': '@', '19': '!', '1c': '$', '1e': '&', '10': '(', '11': ')', '12': '*',
+                '13': '+', '14': ',', '03': ';', '05': '=', '1d': '%'
+            };
+            
+            let decoded = '';
+            for (let i = 0; i < encoded.length; i += 2) {
+                const hex = encoded.substr(i, 2);
+                if (hexMap[hex]) {
+                    decoded += hexMap[hex];
+                }
+            }
+            
+            return decoded.replace('/clock', '/clock.json');
+        }
+        
+        // Fetch video links from provider
+        async function fetchVideoLinks(providerUrl, sourceName) {
+            const links = [];
+            
+            try {
+                const response = await fetch(`${API_PROXY}/provider?url=${encodeURIComponent(providerUrl)}`);
+                const data = await response.json();
+                
+                if (!data.success || !data.links) {
+                    return links;
+                }
+                
+                for (const link of data.links) {
+                    links.push({
+                        quality: link.quality || 'unknown',
+                        url: link.url,
+                        provider: sourceName,
+                        type: link.type || 'mp4',
+                        subtitles: link.subtitles || null
+                    });
+                }
+                
+            } catch (error) {
+                console.warn(`Failed to fetch from ${sourceName}:`, error);
+            }
+            
+            return links;
+        }
+        
+        // Select best quality link
+        function selectBestQuality(videoLinks) {
+            if (videoLinks.length === 0) return null;
+            
+            // Prefer direct video files over m3u8 streams
+            const directLinks = videoLinks.filter(link => !link.url.includes('m3u8'));
+            if (directLinks.length > 0) {
+                return directLinks.sort((a, b) => {
+                    const qualityA = parseInt(a.quality) || 0;
+                    const qualityB = parseInt(b.quality) || 0;
+                    return qualityB - qualityA;
+                })[0];
+            }
+            
+            // Fall back to m3u8 streams
+            return videoLinks.sort((a, b) => {
+                const qualityA = parseInt(a.quality) || 0;
+                const qualityB = parseInt(b.quality) || 0;
+                return qualityB - qualityA;
+            })[0];
+        }
+        
+        function displayVideoPlayer(selectedLink) {
+            const playerContainer = document.getElementById('videoPlayer');
+            
+            if (!selectedLink) {
+                showError('No playable video source found');
+                return;
+            }
+            
+            const videoType = selectedLink.url.includes('.m3u8') ? 'application/x-mpegURL' : 'video/mp4';
+            
+            let subtitleTrack = '';
+            if (selectedLink.subtitles) {
+                subtitleTrack = `<track kind="subtitles" src="${selectedLink.subtitles}" srclang="en" label="English" default>`;
+            }
+            
+            playerContainer.innerHTML = `
+                <h3>Now Playing: ${currentAnime.name}</h3>
+                <p>Quality: ${selectedLink.quality}p | Provider: ${selectedLink.provider}</p>
+                <video controls style="width: 100%; max-width: 800px;">
+                    <source src="${selectedLink.url}" type="${videoType}">
+                    ${subtitleTrack}
+                    Your browser does not support the video tag.
+                </video>
+            `;
+            
+            playerContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        function showLoading(show) {
+            document.getElementById('loading').style.display = show ? 'block' : 'none';
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+        }
+        
+        function hideError() {
+            document.getElementById('error').style.display = 'none';
+        }
+        
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+            document.getElementById('episodes').innerHTML = '';
+            document.getElementById('videoPlayer').innerHTML = '';
+        }
+    </script>
+</body>
+</html>
