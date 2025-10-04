@@ -271,9 +271,3 @@ To update your deployment:
    ```
 
 3. **Clear browser cache** for the frontend
-
----
-
-**⭐ Star this repository if you find it useful!**
-
-For support, please open an issue or join our [Discord community](https://discord.gg/your-invite-link).
